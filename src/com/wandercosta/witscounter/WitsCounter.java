@@ -1,4 +1,4 @@
-package witscounterclient;
+package com.wandercosta.witscounter;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -8,13 +8,13 @@ import java.net.Socket;
  *
  * @author Roberto Wander
  */
-public class WitsCounterClient {
+public class WitsCounter {
 
     private final Object counterSemaphore;
     private final boolean[][] map;
     private int totalCounter;
 
-    public WitsCounterClient() {
+    public WitsCounter() {
         counterSemaphore = new Object();
         totalCounter = 0;
         map = new boolean[99][99];
@@ -145,7 +145,7 @@ public class WitsCounterClient {
 
         if (args == null || args.length == 0 || ("--help".compareTo(args[0]) == 0) || args.length != 3) {
 
-            System.out.println("Usage: java -jar WitsCounterClient.jar [host] [port] [interval]");
+            System.out.println("Usage: java -jar WitsCounter.jar [host] [port] [interval]");
             System.out.println(
                     "Connects to a Wits server through TCP Socket and prints the number\n"
                     + "of parameters being received per time interval.\n"
@@ -174,7 +174,7 @@ public class WitsCounterClient {
 
         }
 
-        WitsCounterClient counter = new WitsCounterClient();
+        WitsCounter counter = new WitsCounter();
         counter.start(host, port, interval);
 
     }
