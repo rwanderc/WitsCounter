@@ -5,8 +5,10 @@ import java.io.InputStreamReader;
 import java.net.Socket;
 
 /**
+ * A command-line Wits client that connects to a Wits server through TCP and
+ * counts the number of parameters being received per time interval.
  *
- * @author Roberto Wander
+ * @author Roberto Wander (www.wandercosta.com)
  */
 public class WitsCounter {
 
