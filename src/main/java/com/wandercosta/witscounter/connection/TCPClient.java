@@ -1,4 +1,4 @@
-package com.wandercosta.witscounter;
+package com.wandercosta.witscounter.connection;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -13,7 +13,7 @@ import javax.net.SocketFactory;
  *
  * @author Wander Costa (www.wandercosta.com)
  */
-class TCPSocketClient {
+public class TCPClient {
 
     private static final String NULL_SOCKET_FACTORY = "SocketFactory must be provided.";
     private static final String NULL_HOST = "Host must be provided.";
@@ -26,14 +26,14 @@ class TCPSocketClient {
     private BufferedReader bufferedReader;
     private boolean connected;
 
-    TCPSocketClient(SocketFactory socketFactory, String host, int port) {
+    public TCPClient(SocketFactory socketFactory, String host, int port) {
         validate(socketFactory, host, port);
         this.socketFactory = socketFactory;
         this.host = host;
         this.port = port;
     }
 
-    synchronized void connect() throws IOException {
+    public synchronized void connect() throws IOException {
         if (connected) {
             return;
         }
@@ -44,7 +44,7 @@ class TCPSocketClient {
         bufferedReader = new BufferedReader(reader);
     }
 
-    synchronized void disconnect() {
+    public synchronized void disconnect() {
         if (!connected) {
             return;
         }
@@ -56,7 +56,7 @@ class TCPSocketClient {
         connected = false;
     }
 
-    String readLine() throws IOException {
+    public String readLine() throws IOException {
         return bufferedReader.readLine();
     }
 
