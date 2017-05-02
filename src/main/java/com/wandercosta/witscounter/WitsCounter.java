@@ -1,201 +1,88 @@
 package com.wandercosta.witscounter;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.Socket;
+import java.io.IOException;
+import java.util.Objects;
+import javax.net.SocketFactory;
 
 /**
- * A command-line Wits client that connects to a Wits server through TCP and
- * counts the number of parameters being received per time interval.
+ * A Wits client that connects to a Wits server through TCP and counts the number of parameters
+ * being received per time interval.
  *
  * @author Wander Costa (www.wandercosta.com)
  */
-public class WitsCounter {
+class WitsCounter {
 
-    private final Object counterSemaphore;
-    private final boolean[][] map;
-    private int totalCounter;
+    private static final String NULL_SOCKET_FACTORY = "SocketFactory must be provided.";
+    private static final String NULL_HOST = "Host must be provided.";
+    private static final String WRONG_PORT = "Port must be between 1 and 65535.";
+    private static final String WRONG_INTERVAL = "Interval must be greater than 99ms.";
 
-    public WitsCounter() {
-        counterSemaphore = new Object();
-        totalCounter = 0;
-        map = new boolean[99][99];
+    private final SocketFactory socketFactory;
+    private final String host;
+    private final int port;
+    private final int interval;
+    private final IntCounter counter;
+
+    private CountPrinter counterPrinter;
+    private WitsReader witsReader;
+
+    private transient boolean keepRunning;
+
+    WitsCounter(SocketFactory socketFactory, String host, int port, int interval) {
+        validate(socketFactory, host, port, interval);
+        this.socketFactory = socketFactory;
+        this.host = host;
+        this.port = port;
+        this.interval = interval;
+        this.counter = new IntCounter();
     }
 
-    public void start(String host, Integer port, Integer interval) {
-
-        if (interval <= 0) {
-            interval = 1000;
-            System.out.println("Overwriting interval to 1000ms...");
-        }
-
-        try {
-
-            Socket client = new Socket(host, port);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(client.getInputStream()));
-
-            new Thread() {
-
-                @Override
-                public void run() {
-
-                    String text = null;
-
-                    while (true) {
-
-                        try {
-                            text = reader.readLine();
-                        } catch (Throwable ex) {
-                        }
-
-                        if (text != null) {
-                            count(text);
-                        }
-
-                    }
-
-                }
-
-            }.start();
-
-            long sleep = 1000 - (System.currentTimeMillis() % 1000);
-            try {
-                Thread.sleep(sleep);
-            } catch (Throwable ex) {
-            }
-
-            int tempCounter;
-
-            while (true) {
-
-                synchronized (counterSemaphore) {
-                    tempCounter = totalCounter;
-                    totalCounter = 0;
-                }
-
-                System.out.println(tempCounter + " total var(s) / " + interval + " ms");
-                System.out.println(countDifferentInMap(map) + " diff var(s) / " + interval + " ms");
-                sleep = interval - (System.currentTimeMillis() % interval);
-                try {
-                    Thread.sleep(sleep);
-                } catch (Throwable ex) {
-                }
-
-            }
-
-        } catch (Throwable ex) {
-
-            System.err.println("Unknown error. Halting...");
-            System.exit(1);
-
-        }
-
-    }
-
-    private void count(String data) {
-
-        if (data.isEmpty()) {
+    void start() {
+        if (keepRunning) {
             return;
         }
 
-        int tmpCounter = 0;
+        keepRunning = true;
 
-        do {
+        Object semaphore = new Object();
+        byte[][] dataMap = new byte[99][99];
 
-            int linebreak = data.indexOf("\n");
-            String line;
-
-            if (linebreak == -1) {
-                line = data;
-                data = "";
-            } else {
-                line = data.substring(0, linebreak);
-                data = data.substring(linebreak + 1, data.length());
-            }
-
-            if (line != null) {
-
-                if (!line.startsWith("&&") && !line.startsWith("!!")) {
-
-                    try {
-                        int recIndex = Integer.valueOf(line.substring(0, 2));
-                        int itemIndex = Integer.valueOf(line.substring(2, 4));
-                        map[recIndex - 1][itemIndex - 1] = true;
-                        tmpCounter++;
-                    } catch (Throwable ex) {
-
-                    }
-
-                }
-
-            }
-
-        } while (!data.isEmpty());
-
-        synchronized (counterSemaphore) {
-            totalCounter += tmpCounter;
-        }
-
-    }
-
-    /**
-     * Main method to call application.
-     *
-     * @param args the command line arguments
-     */
-    public static void main(String[] args) {
-
-        if (args == null || args.length == 0 || ("--help".compareTo(args[0]) == 0) || args.length != 3) {
-
-            System.out.println("Usage: java -jar WitsCounter.jar [host] [port] [interval]");
-            System.out.println(
-                    "Connects to a Wits server through TCP Socket and prints the number\n"
-                    + "of parameters being received per time interval.\n"
-                    + "Does not reconnect if connection fails.\n"
-                    + "  [host]\tThe IP of hostname of the server\n"
-                    + "  [port]\tThe port of the server\n"
-                    + "  [interval]\tThe time interval, in milliseconds, to aggregate\n"
-                    + "\t\tvalues. If less or equal 0, 1000 is used.");
-            System.exit(1);
-
-        }
-
-        String host = args[0];
-        Integer port = null;
-        Integer interval = null;
+        counterPrinter = new CountPrinter(counter, semaphore, interval, dataMap);
+        TCPSocketClient client = new TCPSocketClient(socketFactory, host, port);
+        witsReader = new WitsReader(client, counter, semaphore, dataMap);
 
         try {
-
-            port = Integer.valueOf(args[1]);
-            interval = Integer.valueOf(args[2]);
-
-        } catch (Throwable ex) {
-
-            System.err.println("Need 2 parameters");
+            counterPrinter.start();
+            witsReader.start();
+        } catch (IOException ex) {
+            System.err.println("Error to connect to server. Halting...");
             System.exit(1);
-
         }
-
-        WitsCounter counter = new WitsCounter();
-        counter.start(host, port, interval);
-
     }
 
-    private int countDifferentInMap(boolean[][] map) {
-
-        int diffCounter = 0;
-
-        for (int i = 0; i < map.length; i++) {
-            for (int j = 0; j < map[i].length; j++) {
-                if (map[i][j] != false) {
-                    diffCounter++;
-                    map[i][j] = false;
-                }
-            }
+    void stop() {
+        if (!keepRunning) {
+            return;
         }
+        keepRunning = false;
 
-        return diffCounter;
+        if (witsReader != null) {
+            witsReader.stop();
+        }
+        if (counterPrinter != null) {
+            counterPrinter.stop();
+        }
+    }
 
+    private void validate(SocketFactory socketFactory, String host, int port, int interval) {
+        Objects.requireNonNull(socketFactory, NULL_SOCKET_FACTORY);
+        Objects.requireNonNull(host, NULL_HOST);
+        if (port < 1 || port > 65_535) {
+            throw new IllegalArgumentException(WRONG_PORT);
+        }
+        if (interval < 100) {
+            throw new IllegalArgumentException(WRONG_INTERVAL);
+        }
     }
 
 }
